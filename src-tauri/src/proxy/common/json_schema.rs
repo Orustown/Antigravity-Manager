@@ -69,7 +69,12 @@ fn flatten_refs(map: &mut serde_json::Map<String, Value>, defs: &serde_json::Map
 fn clean_json_schema_recursive(value: &mut Value) {
     match value {
         Value::Object(map) => {
-            // 1. 收集并处理校验字段 (Soft-Remove with Type Check & Unwrapping)
+            // 1. 先递归处理所有子节点，确保嵌套结构被正确清理
+            for v in map.values_mut() {
+                clean_json_schema_recursive(v);
+            }
+
+            // 2. 收集并处理校验字段 (Soft-Remove with Type Check & Unwrapping)
             let mut constraints = Vec::new();
             
             // String 类型校验 (pattern): 必须是 String，否则可能是属性定义
@@ -104,7 +109,7 @@ fn clean_json_schema_recursive(value: &mut Value) {
                 }
             }
 
-            // 2. 将约束信息追加到描述
+            // 3. 将约束信息追加到描述
             if !constraints.is_empty() {
                 let suffix = format!(" [Validation: {}]", constraints.join(", "));
                 let desc = map.entry("description".to_string()).or_insert_with(|| Value::String("".to_string()));
@@ -113,7 +118,7 @@ fn clean_json_schema_recursive(value: &mut Value) {
                 }
             }
 
-            // 3. 移除其他会干扰上游的非标准/冲突字段
+            // 4. 移除其他会干扰上游的非标准/冲突字段
             let other_fields_to_remove = [
                 "$schema",
                 "additionalProperties",
@@ -122,12 +127,22 @@ fn clean_json_schema_recursive(value: &mut Value) {
                 "uniqueItems",
                 "format",
                 "default",
+                // MCP 工具常用但 Gemini 不支持的高级字段
+                "propertyNames",
+                "const",
+                "anyOf",
+                "oneOf",
+                "allOf",
+                "not",
+                "if",
+                "then",
+                "else",
             ];
             for field in other_fields_to_remove {
                 map.remove(field);
             }
 
-            // 4. 处理 type 字段 (Gemini Protobuf 不支持数组类型，强制降级)
+            // 5. 处理 type 字段 (Gemini Protobuf 不支持数组类型，强制降级)
             if let Some(type_val) = map.get_mut("type") {
                 match type_val {
                     Value::String(s) => {
@@ -149,11 +164,6 @@ fn clean_json_schema_recursive(value: &mut Value) {
                     }
                     _ => {}
                 }
-            }
-
-            // 3. 递归处理所有子节点 (Schema 中可能存在任意嵌套字段)
-            for v in map.values_mut() {
-                clean_json_schema_recursive(v);
             }
         }
         Value::Array(arr) => {
