@@ -1,6 +1,8 @@
 {
     "common": {
         "loading": "Loading...",
+        "add": "Add",
+        "action": "Action",
         "save": "Save",
         "saved": "Saved successfully",
         "cancel": "Cancel",
@@ -20,7 +22,9 @@
         "clear": "Clear",
         "prev_page": "Previous",
         "next_page": "Next",
-        "pagination_info": "Showing {{start}} to {{end}} of {{total}} entries"
+        "pagination_info": "Showing {{start}} to {{end}} of {{total}} entries",
+        "per_page": "Per page",
+        "items": "items"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -97,7 +101,11 @@
                 "desc": "Opens default browser for Google login to auto-fetch and save Token.",
                 "btn_start": "Start OAuth",
                 "btn_waiting": "Waiting for auth...",
-                "copy_link": "Copy Auth Link"
+                "btn_finish": "I already authorized",
+                "copy_link": "Copy Auth Link",
+                "copied": "Copied",
+                "link_label": "Authorization URL",
+                "link_click_to_copy": "Click to copy"
             },
             "token": {
                 "label": "Refresh Token",
@@ -116,7 +124,8 @@
                 "or": "OR",
                 "scheme_b": "Plan B: From V1 Backup",
                 "scheme_b_desc": "Scan ~/.antigravity-agent for V1 account data.",
-                "btn_v1": "Batch Import V1"
+                "btn_v1": "Batch Import V1",
+                "btn_custom_db": "Import Custom DB"
             },
             "btn_cancel": "Cancel",
             "btn_confirm": "Confirm",
@@ -155,6 +164,7 @@
         "tabs": {
             "general": "General",
             "account": "Account",
+            "proxy": "Proxy",
             "advanced": "Advanced",
             "about": "About"
         },
@@ -164,7 +174,11 @@
             "theme": "Theme",
             "theme_light": "Light",
             "theme_dark": "Dark",
-            "theme_system": "System"
+            "theme_system": "System",
+            "auto_launch": "Launch at Startup",
+            "auto_launch_enabled": "Enabled",
+            "auto_launch_disabled": "Disabled",
+            "auto_launch_desc": "Automatically launch Antigravity Tools when system starts"
         },
         "account": {
             "title": "Account Settings",
@@ -184,6 +198,15 @@
             "open_btn": "Open",
             "data_dir": "Data Directory",
             "data_dir_desc": "Account data and config file location",
+            "antigravity_path": "Antigravity Path",
+            "antigravity_path_placeholder": "Not set (Will use auto-detection)",
+            "antigravity_path_desc": "If you installed Antigravity in a non-standard location, you can manually specify the executable path here (Points to .app on MacOS).",
+            "antigravity_path_select": "Select Antigravity Executable",
+            "antigravity_path_detected": "Detected path updated",
+            "detect_btn": "Detect",
+            "accounts_page_size": "Accounts Page Size",
+            "page_size_auto": "Auto Calculate (Recommended)",
+            "page_size_desc": "Set the number of accounts displayed per page. Select 'Auto Calculate' to dynamically adjust based on window size.",
             "logs_title": "Logs Maintenance",
             "logs_desc": "Clear log cache files. Does not affect account data.",
             "clear_logs": "Clear Logs Cache",
@@ -235,13 +258,26 @@
             "port": "Listen Port",
             "port_hint": "Default 8045, restart required to apply changes",
             "auto_start": "Auto Start with App",
+            "allow_lan_access": "Allow LAN Access",
+            "allow_lan_access_hint_enabled": "🌐 Listening on 0.0.0.0, LAN devices can access",
+            "allow_lan_access_hint_disabled": "🔒 Listening on 127.0.0.1 only, localhost access (Privacy First)",
+            "allow_lan_access_warning": "⚠️ LAN devices can access when enabled. Keep your API key secure",
+            "allow_lan_access_restart_hint": "ℹ️ Service restart required to apply changes",
             "api_key": "API Key",
             "btn_regenerate": "Regenerate Key",
             "btn_copy": "Copy",
             "btn_copied": "Copied",
             "warning_key": "Note: Keep your API key secure. Do not share it.",
             "request_timeout": "Request Timeout",
-            "request_timeout_hint": "Default 120s, range 30-600s. Restart service to apply changes."
+            "request_timeout_hint": "Default 120s, range 30-600s. Restart service to apply changes.",
+            "upstream_proxy": {
+                "title": "Global Upstream Proxy (Global Proxy)",
+                "desc": "When enabled, all external requests (API Proxy, Token Refresh, Quota Check, Update Check) will be routed through this proxy.",
+                "enable": "Enable Upstream Proxy",
+                "url": "Proxy URL",
+                "url_placeholder": "e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:7890",
+                "tip": "Supports HTTP, HTTPS and SOCKS5."
+            }
         },
         "example": {
             "title": "Usage Examples",
@@ -254,18 +290,21 @@
         },
         "model": {
             "flash": "Fast Response",
-            "flash_thinking": "Light Thinking",
-            "pro_low": "Standard",
-            "pro_high": "High Performance",
+            "flash_preview": "Flash Preview",
+            "flash_lite": "Lite & Fast",
+            "flash_thinking": "Thinking Capability",
+            "pro_legacy": "Legacy Pro",
+            "pro_low": "High Performance",
+            "pro_high": "Best Reasoning",
             "pro_image": "Image Generation (1:1)",
             "pro_image_16_9": "Image Generation (16:9)",
             "pro_image_9_16": "Image Generation (9:16)",
             "pro_image_4_3": "Image Generation (4:3)",
             "pro_image_3_4": "Image Generation (3:4)",
             "pro_image_1_1": "Image Generation (1:1)",
-            "claude_sonnet": "Balanced",
-            "claude_sonnet_thinking": "Deep Thinking",
-            "claude_opus_thinking": "Strongest Reasoning"
+            "claude_sonnet": "Code Reasoning",
+            "claude_sonnet_thinking": "Chain of Thought",
+            "claude_opus_thinking": "Strongest Thinking"
         },
         "mapping": {
             "title": "Claude Code Model Mapping",
@@ -276,6 +315,7 @@
             "haiku_desc": "Fastest for quick answers",
             "maps_to": "Maps to Antigravity",
             "apply_recommended": "Apply Recommended",
+            "restore_defaults": "Restore Default Configuration",
             "reset_all": "Reset All"
         },
         "models": {
@@ -287,17 +327,63 @@
             "sonnet_thinking": "Chain of Thought",
             "opus_thinking": "Strongest Thinking"
         },
-        "examples": {
-            "title": "Usage Examples"
+        "router": {
+            "title": "Model Router",
+            "subtitle": "Route models by series or add custom exact mappings.",
+            "group_title": "Series Groups",
+            "groups": {
+                "claude_45": {
+                    "name": "Claude 4.5 Series",
+                    "desc": "Opus 4.5, Sonnet 4.5"
+                },
+                "claude_35": {
+                    "name": "Claude 3.5 Series",
+                    "desc": "Sonnet 3.5, Haiku 3.5"
+                },
+                "gpt_4": {
+                    "name": "GPT-4 / o1 Series",
+                    "desc": "GPT-4, Turbo, o1-preview"
+                },
+                "gpt_4o": {
+                    "name": "GPT-4o / 3.5 Series",
+                    "desc": "GPT-4o, Mini, 3.5 Turbo"
+                },
+                "gpt_5": {
+                    "name": "GPT-5 Series",
+                    "desc": "GPT-5.1, GPT-5.2 xhigh"
+                }
+            },
+            "expert_title": "Expert Custom Routing",
+            "expert_subtitle": "Precise matching for any original model ID.",
+            "reset_confirm": "Reset all mappings to system defaults?",
+            "reset_mapping": "Reset Mapping",
+            "add_mapping": "Add Mapping",
+            "current_list": "Custom List",
+            "no_custom_mapping": "No custom mappings yet",
+            "gemini3_only_warning": "⚠️ Gemini 3 series only",
+            "default_suffix": " (Default)",
+            "original_id": "Original ID",
+            "route_to": "Route To"
         },
         "multi_protocol": {
             "title": "Multi-Protocol Support",
-            "subtitle": "协议支持",
+            "subtitle": "Protocol Support",
             "description": "Proxy service supports both OpenAI and Anthropic API formats to meet different tool requirements",
             "openai_label": "OpenAI Protocol",
             "anthropic_label": "Anthropic Protocol",
-            "openai_tools": "Cursor, Windsurf, NextChat",
-            "anthropic_tools": "Claude Code CLI"
+            "openai_tools": "Cherry Studio, NextChat",
+            "anthropic_tools": "Claude Code CLI",
+            "gemini_label": "Gemini Protocol",
+            "gemini_tools": "Google AI SDK, LangChain",
+            "quick_integration": "Quick Integration",
+            "click_tip": "👆 Click any model on the left to update this code."
+        },
+        "supported_models": {
+            "title": "Supported Models & Integration",
+            "model_name": "Model Name",
+            "model_id": "Model ID",
+            "description": "Description",
+            "action": "Action"
         }
     }
 }
