@@ -4,6 +4,8 @@ use tauri::Emitter;
 
 // 导出 proxy 命令
 pub mod proxy;
+// 导出 autostart 命令
+pub mod autostart;
 
 /// 列出所有账号
 #[tauri::command]
@@ -13,7 +15,7 @@ pub async fn list_accounts() -> Result<Vec<Account>, String> {
 
 /// 添加账号
 #[tauri::command]
-pub async fn add_account(_email: String, refresh_token: String) -> Result<Account, String> {
+pub async fn add_account(app: tauri::AppHandle, _email: String, refresh_token: String) -> Result<Account, String> {
     // 1. 使用 refresh_token 获取 access_token
     // 注意：这里我们忽略传入的 _email，而是直接去 Google 获取真实的邮箱
     let token_res = modules::oauth::refresh_access_token(&refresh_token).await?;
@@ -35,19 +37,40 @@ pub async fn add_account(_email: String, refresh_token: String) -> Result<Accoun
     let account = modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token)?;
     
     modules::logger::log_info(&format!("添加账号成功: {}", account.email));
+
+    // 5. 自动触发刷新额度
+    let mut account = account;
+    let _ = internal_refresh_account_quota(&app, &mut account).await;
     
     Ok(account)
 }
 
 /// 删除账号
 #[tauri::command]
-pub async fn delete_account(account_id: String) -> Result<(), String> {
+pub async fn delete_account(app: tauri::AppHandle, account_id: String) -> Result<(), String> {
     modules::logger::log_info(&format!("收到删除账号请求: {}", account_id));
     modules::delete_account(&account_id).map_err(|e| {
         modules::logger::log_error(&format!("删除账号失败: {}", e));
         e
     })?;
     modules::logger::log_info(&format!("账号删除成功: {}", account_id));
+    
+    // 强制同步托盘
+    crate::modules::tray::update_tray_menus(&app);
+    Ok(())
+}
+
+/// 批量删除账号
+#[tauri::command]
+pub async fn delete_accounts(app: tauri::AppHandle, account_ids: Vec<String>) -> Result<(), String> {
+    modules::logger::log_info(&format!("收到批量删除请求，共 {} 个账号", account_ids.len()));
+    modules::account::delete_accounts(&account_ids).map_err(|e| {
+        modules::logger::log_error(&format!("批量删除失败: {}", e));
+        e
+    })?;
+    
+    // 强制同步托盘
+    crate::modules::tray::update_tray_menus(&app);
     Ok(())
 }
 
@@ -76,6 +99,26 @@ pub async fn get_current_account() -> Result<Option<Account>, String> {
     } else {
         modules::logger::log_info("   No current account set");
         Ok(None)
+    }
+}
+
+/// 内部辅助功能：在添加或导入账号后自动刷新一次额度
+async fn internal_refresh_account_quota(app: &tauri::AppHandle, account: &mut Account) -> Result<QuotaData, String> {
+    modules::logger::log_info(&format!("自动触发刷新配额: {}", account.email));
+    
+    // 使用带重试的查询 (Shared logic)
+    match modules::account::fetch_quota_with_retry(account).await {
+        Ok(quota) => {
+            // 更新账号配额
+            let _ = modules::update_account_quota(&account.id, quota.clone());
+            // 更新托盘菜单
+            crate::modules::tray::update_tray_menus(app);
+            Ok(quota)
+        },
+        Err(e) => {
+            modules::logger::log_warn(&format!("自动刷新配额失败 ({}): {}", account.email, e));
+            Err(e.to_string())
+        }
     }
 }
 
@@ -162,11 +205,25 @@ pub async fn load_config() -> Result<AppConfig, String> {
 
 /// 保存配置
 #[tauri::command]
-pub async fn save_config(app: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
+pub async fn save_config(
+    app: tauri::AppHandle, 
+    proxy_state: tauri::State<'_, crate::commands::proxy::ProxyServiceState>,
+    config: AppConfig
+) -> Result<(), String> {
     modules::save_app_config(&config)?;
     
     // 通知托盘配置已更新
     let _ = app.emit("config://updated", ());
+
+    // 热更新正在运行的服务
+    let instance_lock = proxy_state.instance.read().await;
+    if let Some(instance) = instance_lock.as_ref() {
+        // 更新模型映射
+        instance.axum_server.update_mapping(&config.proxy).await;
+        // 更新上游代理
+        instance.axum_server.update_proxy(config.proxy.upstream_proxy.clone()).await;
+        tracing::info!("已同步热更新反代服务配置");
+    }
     
     Ok(())
 }
@@ -178,7 +235,7 @@ pub async fn start_oauth_login(app_handle: tauri::AppHandle) -> Result<Account, 
     modules::logger::log_info("开始 OAuth 授权流程...");
     
     // 1. 启动 OAuth 流程获取 Token
-    let token_res = modules::oauth_server::start_oauth_flow(app_handle).await?;
+    let token_res = modules::oauth_server::start_oauth_flow(app_handle.clone()).await?;
     
     // 2. 检查 refresh_token
     let refresh_token = token_res.refresh_token.ok_or_else(|| {
@@ -219,7 +276,73 @@ pub async fn start_oauth_login(app_handle: tauri::AppHandle) -> Result<Account, 
     
     // 6. 添加或更新到账号列表
     modules::logger::log_info("正在保存账号信息...");
-    modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token_data)
+    let mut account = modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token_data)?;
+
+    // 7. 自动触发刷新额度
+    let _ = internal_refresh_account_quota(&app_handle, &mut account).await;
+
+    Ok(account)
+}
+
+/// 完成 OAuth 授权（不自动打开浏览器）
+#[tauri::command]
+pub async fn complete_oauth_login(app_handle: tauri::AppHandle) -> Result<Account, String> {
+    modules::logger::log_info("完成 OAuth 授权流程 (manual)...");
+
+    // 1. 等待回调并交换 Token（不 open browser）
+    let token_res = modules::oauth_server::complete_oauth_flow(app_handle.clone()).await?;
+
+    // 2. 检查 refresh_token
+    let refresh_token = token_res.refresh_token.ok_or_else(|| {
+        "未获取到 Refresh Token。\n\n\
+         可能原因:\n\
+         1. 您之前已授权过此应用,Google 不会再次返回 refresh_token\n\n\
+         解决方案:\n\
+         1. 访问 https://myaccount.google.com/permissions\n\
+         2. 撤销 'Antigravity Tools' 的访问权限\n\
+         3. 重新进行 OAuth 授权\n\n\
+         或者使用 'Refresh Token' 标签页手动添加账号".to_string()
+    })?;
+
+    // 3. 获取用户信息
+    let user_info = modules::oauth::get_user_info(&token_res.access_token).await?;
+    modules::logger::log_info(&format!("获取用户信息成功: {}", user_info.email));
+
+    // 4. 尝试获取项目ID
+    let project_id = crate::proxy::project_resolver::fetch_project_id(&token_res.access_token)
+        .await
+        .ok();
+
+    if let Some(ref pid) = project_id {
+        modules::logger::log_info(&format!("获取项目ID成功: {}", pid));
+    } else {
+        modules::logger::log_warn("未能获取项目ID,将在后续懒加载");
+    }
+
+    // 5. 构造 TokenData
+    let token_data = TokenData::new(
+        token_res.access_token,
+        refresh_token,
+        token_res.expires_in,
+        Some(user_info.email.clone()),
+        project_id,
+        None,
+    );
+
+    // 6. 添加或更新到账号列表
+    modules::logger::log_info("正在保存账号信息...");
+    let mut account = modules::upsert_account(user_info.email.clone(), user_info.get_display_name(), token_data)?;
+
+    // 7. 自动触发刷新额度
+    let _ = internal_refresh_account_quota(&app_handle, &mut account).await;
+
+    Ok(account)
+}
+
+/// 预生成 OAuth 授权链接 (不打开浏览器)
+#[tauri::command]
+pub async fn prepare_oauth_url(app_handle: tauri::AppHandle) -> Result<String, String> {
+    crate::modules::oauth_server::prepare_oauth_url(app_handle).await
 }
 
 #[tauri::command]
@@ -231,14 +354,83 @@ pub async fn cancel_oauth_login() -> Result<(), String> {
 // --- 导入命令 ---
 
 #[tauri::command]
-pub async fn import_v1_accounts() -> Result<Vec<Account>, String> {
-    modules::migration::import_from_v1().await
+pub async fn import_v1_accounts(app: tauri::AppHandle) -> Result<Vec<Account>, String> {
+    let accounts = modules::migration::import_from_v1().await?;
+    
+    // 对导入的账号尝试刷新一波
+    for mut account in accounts.clone() {
+        let _ = internal_refresh_account_quota(&app, &mut account).await;
+    }
+
+    Ok(accounts)
 }
 
 #[tauri::command]
-pub async fn import_from_db() -> Result<Account, String> {
+pub async fn import_from_db(app: tauri::AppHandle) -> Result<Account, String> {
     // 同步函数包装为 async
-    modules::migration::import_from_db().await
+    let mut account = modules::migration::import_from_db().await?;
+
+    // 既然是从数据库导入（即 IDE 当前账号），自动将其设为 Manager 的当前账号
+    let account_id = account.id.clone();
+    modules::account::set_current_account_id(&account_id)?;
+    
+    // 自动触发刷新额度
+    let _ = internal_refresh_account_quota(&app, &mut account).await;
+    
+    // 刷新托盘图标展示
+    crate::modules::tray::update_tray_menus(&app);
+
+    Ok(account)
+}
+
+#[tauri::command]
+#[allow(dead_code)]
+pub async fn import_custom_db(app: tauri::AppHandle, path: String) -> Result<Account, String> {
+    // 调用重构后的自定义导入函数
+    let mut account = modules::migration::import_from_custom_db_path(path).await?;
+
+    // 自动设为当前账号
+    let account_id = account.id.clone();
+    modules::account::set_current_account_id(&account_id)?;
+    
+    // 自动触发刷新额度
+    let _ = internal_refresh_account_quota(&app, &mut account).await;
+    
+    // 刷新托盘图标展示
+    crate::modules::tray::update_tray_menus(&app);
+
+    Ok(account)
+}
+
+#[tauri::command]
+pub async fn sync_account_from_db(app: tauri::AppHandle) -> Result<Option<Account>, String> {
+    // 1. 获取 DB 中的 Refresh Token
+    let db_refresh_token = match modules::migration::get_refresh_token_from_db() {
+        Ok(token) => token,
+        Err(e) => {
+            modules::logger::log_info(&format!("自动同步跳过: {}", e));
+            return Ok(None);
+        }
+    };
+
+    // 2. 获取 Manager 当前账号
+    let curr_account = modules::account::get_current_account()?;
+    
+    // 3. 对比：如果 Refresh Token 相同，说明账号没变，无需导入
+    if let Some(acc) = curr_account {
+        if acc.token.refresh_token == db_refresh_token {
+            // 账号未变，由于已经是周期性任务，我们可以选择性刷新一下配额，或者直接返回
+            // 这里为了节省 API 流量，直接返回
+            return Ok(None);
+        }
+        modules::logger::log_info(&format!("检测到账号切换 ({} -> DB新账号)，正在同步...", acc.email));
+    } else {
+        modules::logger::log_info("检测到新登录账号，正在自动同步...");
+    }
+
+    // 4. 执行完整导入
+    let account = import_from_db(app).await?;
+    Ok(Some(account))
 }
 
 /// 保存文本文件 (绕过前端 Scope 限制)
@@ -300,8 +492,20 @@ pub async fn show_main_window(window: tauri::Window) -> Result<(), String> {
 
 /// 获取 Antigravity 可执行文件路径
 #[tauri::command]
-pub async fn get_antigravity_path() -> Result<String, String> {
-    match modules::process::get_antigravity_executable_path() {
+pub async fn get_antigravity_path(bypass_config: Option<bool>) -> Result<String, String> {
+    // 1. 优先从配置查询 (除非明确要求绕过)
+    if bypass_config != Some(true) {
+        if let Ok(config) = crate::modules::config::load_app_config() {
+            if let Some(path) = config.antigravity_executable {
+                if std::path::Path::new(&path).exists() {
+                    return Ok(path);
+                }
+            }
+        }
+    }
+
+    // 2. 执行实时探测
+    match crate::modules::process::get_antigravity_executable_path() {
         Some(path) => Ok(path.to_string_lossy().to_string()),
         None => Err("未找到 Antigravity 安装路径".to_string())
     }
@@ -325,7 +529,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     modules::logger::log_info("开始检测更新...");
     
     // 发起 HTTP 请求
-    let client = reqwest::Client::new();
+    let client = crate::utils::http::create_client(15);
     let response = client
         .get(GITHUB_API_URL)
         .header("User-Agent", "Antigravity-Tools")

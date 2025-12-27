@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Github, User, MessageCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import { Save, Github, User, MessageCircle, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useConfigStore } from '../stores/useConfigStore';
@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 function Settings() {
     const { t } = useTranslation();
     const { config, loadConfig, saveConfig } = useConfigStore();
-    const [activeTab, setActiveTab] = useState<'general' | 'account' | 'advanced' | 'about'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'account' | 'proxy' | 'advanced' | 'about'>('general');
     const [formData, setFormData] = useState<AppConfig>({
         language: 'zh',
         theme: 'system',
@@ -20,6 +20,17 @@ function Settings() {
         refresh_interval: 15,
         auto_sync: false,
         sync_interval: 5,
+        proxy: {
+            enabled: false,
+            port: 8080,
+            api_key: '',
+            auto_start: false,
+            request_timeout: 120,
+            upstream_proxy: {
+                enabled: false,
+                url: ''
+            }
+        }
     });
 
     // Dialog state
@@ -94,6 +105,32 @@ function Settings() {
         }
     };
 
+    const handleSelectAntigravityPath = async () => {
+        try {
+            const selected = await open({
+                directory: false,
+                multiple: false,
+                title: t('settings.advanced.antigravity_path_select'),
+            });
+            if (selected && typeof selected === 'string') {
+                setFormData({ ...formData, antigravity_executable: selected });
+            }
+        } catch (error) {
+            showToast(`${t('common.error')}: ${error}`, 'error');
+        }
+    };
+
+
+    const handleDetectAntigravityPath = async () => {
+        try {
+            const path = await invoke<string>('get_antigravity_path', { bypassConfig: true });
+            setFormData({ ...formData, antigravity_executable: path });
+            showToast(t('settings.advanced.antigravity_path_detected'), 'success');
+        } catch (error) {
+            showToast(`${t('common.error')}: ${error}`, 'error');
+        }
+    };
+
     const handleCheckUpdate = async () => {
         setIsCheckingUpdate(true);
         setUpdateInfo(null);
@@ -148,6 +185,15 @@ function Settings() {
                             onClick={() => setActiveTab('account')}
                         >
                             {t('settings.tabs.account')}
+                        </button>
+                        <button
+                            className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'proxy'
+                                ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                                }`}
+                            onClick={() => setActiveTab('proxy')}
+                        >
+                            {t('settings.tabs.proxy')}
                         </button>
                         <button
                             className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'advanced'
@@ -210,6 +256,29 @@ function Settings() {
                                     <option value="dark">{t('settings.general.theme_dark')}</option>
                                     <option value="system">{t('settings.general.theme_system')}</option>
                                 </select>
+                            </div>
+
+                            {/* 开机自动启动 */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-900 dark:text-base-content mb-2">{t('settings.general.auto_launch')}</label>
+                                <select
+                                    className="w-full px-4 py-4 border border-gray-200 dark:border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-base-content bg-gray-50 dark:bg-base-200"
+                                    value={formData.auto_launch ? 'enabled' : 'disabled'}
+                                    onChange={async (e) => {
+                                        const enabled = e.target.value === 'enabled';
+                                        try {
+                                            await invoke('toggle_auto_launch', { enable: enabled });
+                                            setFormData({ ...formData, auto_launch: enabled });
+                                            showToast(enabled ? '已启用开机自动启动' : '已禁用开机自动启动', 'success');
+                                        } catch (error) {
+                                            showToast(`${t('common.error')}: ${error}`, 'error');
+                                        }
+                                    }}
+                                >
+                                    <option value="disabled">{t('settings.general.auto_launch_disabled')}</option>
+                                    <option value="enabled">{t('settings.general.auto_launch_enabled')}</option>
+                                </select>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('settings.general.auto_launch_desc')}</p>
                             </div>
                         </div>
                     )}
@@ -338,13 +407,52 @@ function Settings() {
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('settings.advanced.data_dir_desc')}</p>
                             </div>
 
+                            {/* 反重力程序路径 */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-900 dark:text-base-content mb-1">
+                                    {t('settings.advanced.antigravity_path')}
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        className="flex-1 px-4 py-4 border border-gray-200 dark:border-base-300 rounded-lg bg-gray-50 dark:bg-base-200 text-gray-900 dark:text-base-content font-medium"
+                                        value={formData.antigravity_executable || ''}
+                                        placeholder={t('settings.advanced.antigravity_path_placeholder')}
+                                        onChange={(e) => setFormData({ ...formData, antigravity_executable: e.target.value })}
+                                    />
+                                    {formData.antigravity_executable && (
+                                        <button
+                                            className="px-4 py-2 border border-gray-200 dark:border-base-300 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+                                            onClick={() => setFormData({ ...formData, antigravity_executable: undefined })}
+                                        >
+                                            {t('common.clear')}
+                                        </button>
+                                    )}
+                                    <button
+                                        className="px-4 py-2 border border-gray-200 dark:border-base-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-base-200 transition-colors"
+                                        onClick={handleDetectAntigravityPath}
+                                    >
+                                        {t('settings.advanced.detect_btn')}
+                                    </button>
+                                    <button
+                                        className="px-4 py-2 border border-gray-200 dark:border-base-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-base-200 transition-colors"
+                                        onClick={handleSelectAntigravityPath}
+                                    >
+                                        {t('settings.advanced.select_btn')}
+                                    </button>
+                                </div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                                    {t('settings.advanced.antigravity_path_desc')}
+                                </p>
+                            </div>
+
                             <div className="border-t border-gray-200 dark:border-base-200 pt-4">
                                 <h3 className="font-medium text-gray-900 dark:text-base-content mb-3">{t('settings.advanced.logs_title')}</h3>
                                 <div className="bg-gray-50 dark:bg-base-200 border border-gray-200 dark:border-base-300 rounded-lg p-3 mb-3">
                                     <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.advanced.logs_desc')}</p>
                                 </div>
                                 <div className="badge badge-primary badge-outline gap-2 font-mono">
-                                    v3.0.3
+                                    v3.3.0
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <button
@@ -358,7 +466,76 @@ function Settings() {
                         </div>
                     )}
 
-                    {/* 关于 */}
+                    {/* 代理设置 */}
+                    {activeTab === 'proxy' && (
+                        <div className="space-y-6">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-base-content">{t('settings.tabs.proxy')}</h2>
+
+                            <div className="p-4 bg-gray-50 dark:bg-base-200 rounded-lg border border-gray-100 dark:border-base-300">
+                                <h3 className="text-md font-semibold text-gray-900 dark:text-base-content mb-3 flex items-center gap-2">
+                                    <Sparkles size={18} className="text-blue-500" />
+                                    {t('proxy.config.upstream_proxy.title')}
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                    {t('proxy.config.upstream_proxy.desc')}
+                                </p>
+
+                                <div className="space-y-4">
+                                    <div className="flex items-center">
+                                        <label className="flex items-center cursor-pointer gap-3">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only"
+                                                    checked={formData.proxy?.upstream_proxy?.enabled || false}
+                                                    onChange={(e) => setFormData({
+                                                        ...formData,
+                                                        proxy: {
+                                                            ...formData.proxy,
+                                                            upstream_proxy: {
+                                                                ...formData.proxy.upstream_proxy,
+                                                                enabled: e.target.checked
+                                                            }
+                                                        }
+                                                    })}
+                                                />
+                                                <div className={`block w-14 h-8 rounded-full transition-colors ${formData.proxy?.upstream_proxy?.enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-base-300'}`}></div>
+                                                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${formData.proxy?.upstream_proxy?.enabled ? 'transform translate-x-6' : ''}`}></div>
+                                            </div>
+                                            <span className="text-sm font-medium text-gray-900 dark:text-base-content">
+                                                {t('proxy.config.upstream_proxy.enable')}
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            {t('proxy.config.upstream_proxy.url')}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.proxy?.upstream_proxy?.url || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                proxy: {
+                                                    ...formData.proxy,
+                                                    upstream_proxy: {
+                                                        ...formData.proxy.upstream_proxy,
+                                                        url: e.target.value
+                                                    }
+                                                }
+                                            })}
+                                            placeholder={t('proxy.config.upstream_proxy.url_placeholder')}
+                                            className="w-full px-4 py-4 border border-gray-200 dark:border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-base-content bg-gray-50 dark:bg-base-200"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                            {t('proxy.config.upstream_proxy.tip')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {activeTab === 'about' && (
                         <div className="flex flex-col h-full animate-in fade-in duration-500">
                             <div className="flex-1 flex flex-col justify-center items-center space-y-8">
@@ -377,7 +554,7 @@ function Settings() {
                                         <h3 className="text-3xl font-black text-gray-900 dark:text-base-content tracking-tight mb-2">Antigravity Tools</h3>
                                         <div className="flex items-center justify-center gap-2 text-sm">
                                             <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium border border-blue-200 dark:border-blue-800">
-                                                v3.0.3
+                                                v3.3.0
                                             </span>
                                             <span className="text-gray-400 dark:text-gray-600">•</span>
                                             <span className="text-gray-500 dark:text-gray-400">Professional Account Management</span>
@@ -435,7 +612,7 @@ function Settings() {
                                         Tauri v2
                                     </div>
                                     <div className="px-3 py-1 bg-gray-50 dark:bg-base-200 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-base-300">
-                                        React 18
+                                        React 19
                                     </div>
                                     <div className="px-3 py-1 bg-gray-50 dark:bg-base-200 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-base-300">
                                         TypeScript
