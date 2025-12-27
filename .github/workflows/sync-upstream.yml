@@ -12,21 +12,29 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Sync Fork with Upstream
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
+      - name: Checkout Fork
+        uses: actions/checkout@v4
         with:
+          ref: main
+          fetch-depth: 0
           # 使用 PAT_TOKEN 以获得修改工作流文件的权限
-          # 如果没有设置 PAT_TOKEN，则回退到 GITHUB_TOKEN（但无法同步工作流文件）
-          target_repo_token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-          upstream_sync_repo: lbjlaq/Antigravity-Manager
-          upstream_sync_branch: main
-          target_sync_branch: main
-          test_mode: false
-          
-      - name: Check Sync Status
-        if: failure()
+          token: ${{ secrets.PAT_TOKEN }}
+          persist-credentials: true
+      
+      - name: Configure Git
         run: |
-          echo "Sync failed. This might be due to:"
-          echo "1. Merge conflicts - resolve manually"
-          echo "2. Missing PAT_TOKEN - create a Personal Access Token with 'workflow' scope"
-          echo "   and add it as a repository secret named 'PAT_TOKEN'"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Add Upstream and Fetch
+        run: |
+          git remote add upstream https://github.com/lbjlaq/Antigravity-Manager.git
+          git fetch upstream main
+      
+      - name: Merge Upstream Changes
+        run: |
+          git merge upstream/main --no-edit --allow-unrelated-histories
+      
+      - name: Push Changes
+        run: |
+          git push origin main
