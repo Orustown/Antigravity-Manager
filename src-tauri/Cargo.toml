@@ -1,6 +1,6 @@
 [package]
 name = "antigravity_tools"
-version = "3.3.5"
+version = "3.3.7"
 description = "A Tauri App"
 authors = ["you"]
 license = "CC-BY-NC-SA-4.0"
@@ -40,7 +40,7 @@ image = "0.25.9"
 thiserror = "2.0.17"
 
 # 反代服务依赖
-axum = "0.7"
+axum = { version = "0.7", features = ["multipart"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 tower = "0.4"
