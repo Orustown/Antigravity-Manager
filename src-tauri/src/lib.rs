@@ -113,9 +113,13 @@ pub fn run() {
             commands::proxy::stop_proxy_service,
             commands::proxy::get_proxy_status,
             commands::proxy::get_proxy_stats,
+            commands::proxy::get_proxy_logs,
+            commands::proxy::set_proxy_monitor_enabled,
+            commands::proxy::clear_proxy_logs,
             commands::proxy::generate_api_key,
             commands::proxy::reload_proxy_accounts,
             commands::proxy::update_model_mapping,
+            commands::proxy::fetch_zai_models,
             // Autostart 命令
             commands::autostart::toggle_auto_launch,
             commands::autostart::is_auto_launch_enabled,

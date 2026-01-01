@@ -1,6 +1,6 @@
 use crate::models::{Account, TokenData, QuotaData, AppConfig};
 use crate::modules;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 // 导出 proxy 命令
 pub mod proxy;
@@ -41,6 +41,9 @@ pub async fn add_account(app: tauri::AppHandle, _email: String, refresh_token: S
     // 5. 自动触发刷新额度
     let mut account = account;
     let _ = internal_refresh_account_quota(&app, &mut account).await;
+
+    // 6. If proxy is running, reload token pool so changes take effect immediately.
+    let _ = crate::commands::proxy::reload_proxy_accounts(app.state::<crate::commands::proxy::ProxyServiceState>()).await;
     
     Ok(account)
 }
@@ -161,6 +164,10 @@ pub async fn refresh_all_quotas() -> Result<RefreshStats, String> {
 
     // 串行处理以确保持久化安全 (SQLite)
     for mut account in accounts {
+        if account.disabled {
+            modules::logger::log_info(&format!("  - Skipping {} (Disabled)", account.email));
+            continue;
+        }
         if let Some(ref q) = account.quota {
             if q.is_forbidden {
                 modules::logger::log_info(&format!("  - Skipping {} (Forbidden)", account.email));
@@ -222,6 +229,10 @@ pub async fn save_config(
         instance.axum_server.update_mapping(&config.proxy).await;
         // 更新上游代理
         instance.axum_server.update_proxy(config.proxy.upstream_proxy.clone()).await;
+        // 更新安全策略 (auth)
+        instance.axum_server.update_security(&config.proxy).await;
+        // 更新 z.ai 配置
+        instance.axum_server.update_zai(&config.proxy).await;
         tracing::info!("已同步热更新反代服务配置");
     }
     
@@ -281,6 +292,12 @@ pub async fn start_oauth_login(app_handle: tauri::AppHandle) -> Result<Account, 
     // 7. 自动触发刷新额度
     let _ = internal_refresh_account_quota(&app_handle, &mut account).await;
 
+    // 8. If proxy is running, reload token pool so changes take effect immediately.
+    let _ = crate::commands::proxy::reload_proxy_accounts(
+        app_handle.state::<crate::commands::proxy::ProxyServiceState>(),
+    )
+    .await;
+
     Ok(account)
 }
 
@@ -335,6 +352,12 @@ pub async fn complete_oauth_login(app_handle: tauri::AppHandle) -> Result<Accoun
 
     // 7. 自动触发刷新额度
     let _ = internal_refresh_account_quota(&app_handle, &mut account).await;
+
+    // 8. If proxy is running, reload token pool so changes take effect immediately.
+    let _ = crate::commands::proxy::reload_proxy_accounts(
+        app_handle.state::<crate::commands::proxy::ProxyServiceState>(),
+    )
+    .await;
 
     Ok(account)
 }
