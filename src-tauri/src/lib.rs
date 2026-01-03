@@ -84,6 +84,7 @@ pub fn run() {
             commands::add_account,
             commands::delete_account,
             commands::delete_accounts,
+            commands::reorder_accounts,
             commands::switch_account,
             commands::get_current_account,
             // 配额命令
@@ -107,6 +108,7 @@ pub fn run() {
             commands::get_data_dir_path,
             commands::show_main_window,
             commands::get_antigravity_path,
+            commands::get_antigravity_args,
             commands::check_for_updates,
             commands::toggle_proxy_status,
             // 反代服务命令
