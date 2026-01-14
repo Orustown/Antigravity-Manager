@@ -8,6 +8,7 @@
         "saved": "保存成功",
         "cancel": "取消",
         "confirm": "确认",
+        "close": "关闭",
         "delete": "删除",
         "edit": "编辑",
         "refresh": "刷新",
@@ -41,8 +42,10 @@
         "theme_to_light": "切换到浅色模式",
         "switch_to_english": "切换到英文",
         "switch_to_chinese": "切换到中文",
+        "switch_to_traditional_chinese": "切换到繁体中文",
         "switch_to_english_short": "EN",
         "switch_to_chinese_short": "ZH",
+        "switch_to_traditional_chinese_short": "TW",
         "switch_to_japanese": "切换到日文",
         "switch_to_japanese_short": "JA",
         "switch_to_turkish": "切换到土耳其文",
@@ -311,7 +314,13 @@
             "latest_version": "已是最新版本",
             "new_version_available": "发现新版本 {{version}}",
             "download_update": "前往下载",
-            "update_check_failed": "检测更新失败"
+            "update_check_failed": "检测更新失败",
+            "support_btn": "支持作者",
+            "support_title": "赞助支持",
+            "support_desc": "如果您觉得本工具对您有帮助，欢迎扫码请作者喝杯咖啡！您的支持是我持续维护项目的最大动力。",
+            "support_alipay": "支付宝",
+            "support_wechat": "微信支付",
+            "support_buymeacoffee": "Buy Me a Coffee"
         }
     },
     "tray": {
@@ -462,6 +471,12 @@
                 "max_wait_tooltip": "仅在“缓存优先”模式下生效：如果账号限流重置时间小于此值，则原地等待而非切换账号。",
                 "clear_bindings": "清除会话绑定",
                 "clear_bindings_tooltip": "立即断开所有会话与账号的绑定关系，强制下一次请求重新分配账号。"
+            },
+            "experimental": {
+                "title": "实验性设置 (Experimental)",
+                "title_tooltip": "探索性功能，可能在未来版本中调整或移除。",
+                "enable_usage_scaling": "启用用量缩放",
+                "enable_usage_scaling_tooltip": "针对 Claude 兼容协议。当总输入超过 30k Token 时开启激进缩放，防止在大上下文下频繁触发客户端压缩。注意：开启后客户端显示的用量不再代表实际计费点数。"
             }
         },
         "example": {
@@ -654,5 +669,14 @@
         "title": "发现新版本",
         "message": "新版本已准备就绪，包含多项优化与改进。当前版本: v{{current}}",
         "action": "立即更新"
+    },
+    "errors": {
+        "stream": {
+            "timeout_error": "请求超时,请检查网络连接",
+            "connection_error": "无法连接到服务器,请检查网络或代理设置",
+            "decode_error": "网络连接不稳定,数据传输中断。建议: 1) 检查网络连接 2) 更换代理节点 3) 稍后重试",
+            "stream_error": "数据流传输错误,请稍后重试",
+            "unknown_error": "发生未知错误,请稍后重试"
+        }
     }
 }
